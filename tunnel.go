@@ -4,13 +4,19 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 )
 
 func main() {
 	if len(os.Args) < 3 {
-		panic("Too few arguments")
+		fmt.Printf("Too few arguments\n")
+		fmt.Printf("Usage:\n")
+		fmt.Printf("	tunnel [local host:port] [remote host:port]\n")
+		fmt.Printf("Example:\n")
+		fmt.Printf("	tunnel :9999 example.com:443\n")
+		return
 	}
 
 	l, err := net.Listen("tcp", os.Args[1])
@@ -28,13 +34,18 @@ func main() {
 			tlsConn, err := tls.Dial("tcp", os.Args[2], &tls.Config{
 				InsecureSkipVerify: true,
 			})
-			fmt.Printf("Conncting... %s\n", os.Args[2])
+
 			if err != nil {
-				fmt.Printf("Failed %s\n", err)
+				log.Printf("%s -> %s: failed: %s\n", conn.RemoteAddr(), os.Args[2], err)
 				return
 			}
-			defer tlsConn.Close()
-			defer conn.Close()
+			log.Printf("%s -> %s: connected\n", conn.RemoteAddr(), tlsConn.RemoteAddr())
+
+			defer func() {
+				log.Printf("%s -> %s: disconnected\n", conn.RemoteAddr(), tlsConn.RemoteAddr())
+				tlsConn.Close()
+				conn.Close()
+			}()
 
 			go io.Copy(tlsConn, conn)
 			io.Copy(conn, tlsConn)
