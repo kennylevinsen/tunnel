@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -10,16 +9,34 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Printf("Too few arguments\n")
-		fmt.Printf("Usage:\n")
-		fmt.Printf("	tunnel [local host:port] [remote host:port]\n")
-		fmt.Printf("Example:\n")
-		fmt.Printf("	tunnel :9999 example.com:443\n")
+	if len(os.Args) < 4 {
+		println("Too few arguments")
+		println("Usage:")
+		println("	tunnel [transport] [local host:port] [remote host:port]")
+		println("Example:")
+		println("	tunnel tls :9999 example.com:443")
+		println("Supported transports:")
+		println("   tls, plain")
 		return
 	}
 
-	l, err := net.Listen("tcp", os.Args[1])
+	transport, local, remote := os.Args[1], os.Args[2], os.Args[3]
+
+	var handler func() (net.Conn, error)
+	switch transport {
+	case "tls":
+		handler = func() (net.Conn, error) {
+			return tls.Dial("tcp", remote, &tls.Config{
+				InsecureSkipVerify: true,
+			})
+		}
+	case "plain":
+		handler = func() (net.Conn, error) {
+			return net.Dial("tcp", remote)
+		}
+	}
+
+	l, err := net.Listen("tcp", local)
 	if err != nil {
 		panic(err)
 	}
@@ -31,24 +48,21 @@ func main() {
 		}
 
 		go func() {
-			tlsConn, err := tls.Dial("tcp", os.Args[2], &tls.Config{
-				InsecureSkipVerify: true,
-			})
-
+			proxyConn, err := handler()
 			if err != nil {
 				log.Printf("%s -> %s: failed: %s\n", conn.RemoteAddr(), os.Args[2], err)
 				return
 			}
-			log.Printf("%s -> %s: connected\n", conn.RemoteAddr(), tlsConn.RemoteAddr())
+			log.Printf("%s -> %s: connected\n", conn.RemoteAddr(), proxyConn.RemoteAddr())
 
 			defer func() {
-				log.Printf("%s -> %s: disconnected\n", conn.RemoteAddr(), tlsConn.RemoteAddr())
-				tlsConn.Close()
+				log.Printf("%s -> %s: disconnected\n", conn.RemoteAddr(), proxyConn.RemoteAddr())
+				proxyConn.Close()
 				conn.Close()
 			}()
 
-			go io.Copy(tlsConn, conn)
-			io.Copy(conn, tlsConn)
+			go io.Copy(proxyConn, conn)
+			io.Copy(conn, proxyConn)
 		}()
 	}
 }
