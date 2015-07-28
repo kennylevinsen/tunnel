@@ -16,7 +16,7 @@ func main() {
 		println("Example:")
 		println("	tunnel tls :9999 example.com:443")
 		println("Supported transports:")
-		println("   tls, plain")
+		println("	tls, plain")
 		return
 	}
 
