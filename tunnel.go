@@ -41,6 +41,8 @@ func main() {
 		panic(err)
 	}
 
+	log.Printf("Transport: %s, binding address: %s, destination: %s", transport, local, remote)
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -48,21 +50,31 @@ func main() {
 		}
 
 		go func() {
-			proxyConn, err := handler()
+			pconn, err := handler()
 			if err != nil {
 				log.Printf("%s -> %s: failed: %s\n", conn.RemoteAddr(), os.Args[2], err)
 				return
 			}
-			log.Printf("%s -> %s: connected\n", conn.RemoteAddr(), proxyConn.RemoteAddr())
+			log.Printf("%s -> %s: connected\n", conn.RemoteAddr(), pconn.RemoteAddr())
 
-			defer func() {
-				log.Printf("%s -> %s: disconnected\n", conn.RemoteAddr(), proxyConn.RemoteAddr())
-				proxyConn.Close()
+			closer := make(chan bool, 1)
+
+			go func() {
+				<-closer
 				conn.Close()
+				pconn.Close()
+				log.Printf("%s -> %s: disconnected\n", conn.RemoteAddr(), pconn.RemoteAddr())
 			}()
 
-			go io.Copy(proxyConn, conn)
-			io.Copy(conn, proxyConn)
+			go func() {
+				io.Copy(pconn, conn)
+				closer <- true
+			}()
+
+			go func() {
+				io.Copy(conn, pconn)
+				closer <- true
+			}()
 		}()
 	}
 }
