@@ -5,11 +5,11 @@ serve2 endpoint to have a stealthy TLS bridge, running a VPN or SSH over it.
 
 Usage:
 
-      tunnel [transport] [local host:port] [remote host:port]
+      tunnel [options] [local transport:host:port] [remote transport:host:port]
 
 Example:
 
-      tunnel tls :9999 example.com:443
+      tunnel plain::9999 tls:example.com:443
       ssh -p 9999 localhost
 
 Installation
