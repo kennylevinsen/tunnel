@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 )
 
 var (
@@ -24,7 +25,7 @@ func usage() {
 	println("Example:")
 	println("	tunnel plain::9999 tls:example.com:443")
 	println("Supported transports:")
-	println("	tls, plain")
+	println("	tls, plain, - (stdin/stdout, local only)")
 	return
 }
 
@@ -39,6 +40,10 @@ func main() {
 	local, remote := args[0], args[1]
 
 	localParts := strings.Split(local, ":")
+	if local == "-" {
+		localParts = []string{"-", "", ""}
+	}
+
 	if len(localParts) != 3 {
 		println("local address incomplete")
 		usage()
@@ -91,6 +96,28 @@ func main() {
 		}
 	}
 
+	if localTransport == "-" {
+		pconn, err := clientHandler()
+		if err != nil {
+			log.Printf("stdin/out -> %s: failed: %s\n", err)
+			return
+		}
+		var closer sync.Once
+		closeFunc := func() {
+			pconn.Close()
+		}
+
+		go func() {
+			io.Copy(pconn, os.Stdin)
+			closer.Do(closeFunc)
+		}()
+
+		io.Copy(os.Stdout, pconn)
+		closer.Do(closeFunc)
+
+		return
+	}
+
 	l, err := net.Listen("tcp", localHost+":"+localPort)
 	if err != nil {
 		panic(err)
@@ -117,23 +144,21 @@ func main() {
 			}
 			log.Printf("%s -> %s: connected\n", conn.RemoteAddr(), pconn.RemoteAddr())
 
-			closer := make(chan bool, 1)
-
-			go func() {
-				<-closer
+			var closer sync.Once
+			closeFunc := func() {
 				conn.Close()
 				pconn.Close()
 				log.Printf("%s -> %s: disconnected\n", conn.RemoteAddr(), pconn.RemoteAddr())
-			}()
+			}
 
 			go func() {
 				io.Copy(pconn, conn)
-				closer <- true
+				closer.Do(closeFunc)
 			}()
 
 			go func() {
 				io.Copy(conn, pconn)
-				closer <- true
+				closer.Do(closeFunc)
 			}()
 		}()
 	}
