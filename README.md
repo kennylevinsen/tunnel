@@ -18,7 +18,7 @@ Example:
 
 Installation
 
-	go get github.com/joushou/tunnel
+	go get github.com/kennylevinsen/tunnel
 
 For more information on serve2 and serve2d, see
-http://github.com/joushou/serve2d and http://github.com/joushou/serve2
+http://github.com/kennylevinsen/serve2d and http://github.com/kennylevinsen/serve2
